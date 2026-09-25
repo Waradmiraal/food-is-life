@@ -372,7 +372,7 @@ function StockPanel({ ingredients, stock, onAdd, onUpdate, onRemove }: {
     .filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
   const inStock = filtered.flatMap((ingredient) => stock.filter((item) => item.ingredientId === ingredient.id).map((item) => ({ ingredient, item })))
-    .sort((a, b) => Number(Boolean(b.item.minimumQuantity !== undefined && b.item.quantity <= b.item.minimumQuantity)) - Number(Boolean(a.item.minimumQuantity !== undefined && a.item.quantity <= a.item.minimumQuantity)) || a.ingredient.name.localeCompare(b.ingredient.name));
+    .sort((a, b) => Number(b.item.quantity === 0) - Number(a.item.quantity === 0) || Number(Boolean(b.item.minimumQuantity !== undefined && b.item.quantity <= b.item.minimumQuantity)) - Number(Boolean(a.item.minimumQuantity !== undefined && a.item.quantity <= a.item.minimumQuantity)) || a.ingredient.name.localeCompare(b.ingredient.name));
   const notInStock = filtered.filter((ingredient) => !stock.some((item) => item.ingredientId === ingredient.id));
   const freezerCount = stock.filter((item) => item.location === 'vriezer' && item.quantity > 0).length;
 
@@ -383,8 +383,8 @@ function StockPanel({ ingredients, stock, onAdd, onUpdate, onRemove }: {
 
       {inStock.length > 0 && (
         <div style={{ marginBottom: '1.25rem' }}>
-          <h3 style={sh}>In huis ({inStock.length})</h3>
-          <p className="text-muted" style={{ margin: '-.15rem 0 .6rem' }}>Pas aantal, eenheid, plek en eventueel je ondergrens aan.</p>
+          <h3 style={sh}>Voorraad ({inStock.length})</h3>
+          <p className="text-muted" style={{ margin: '-.15rem 0 .6rem' }}>Pas aantal, eenheid, plek en eventueel je ondergrens aan. Producten met 0 blijven bewaard.</p>
           <div className="stock-column-headings" aria-hidden="true">
             <span>Product</span>
             <span>Aantal</span>
@@ -395,11 +395,12 @@ function StockPanel({ ingredients, stock, onAdd, onUpdate, onRemove }: {
           </div>
           <div style={{ display: 'grid', gap: '.45rem' }}>
             {inStock.map(({ ingredient, item }) => {
-              const low = item.minimumQuantity !== undefined && item.quantity <= item.minimumQuantity;
+              const out = item.quantity === 0;
+              const low = !out && item.minimumQuantity !== undefined && item.quantity <= item.minimumQuantity;
               const update = (changes: Partial<StockItem>) => onUpdate({ ...item, ...changes });
               return (
-                <div key={ingredient.id} style={{ display: 'flex', alignItems: 'center', gap: '.45rem', flexWrap: 'wrap', padding: '.55rem .65rem', borderRadius: 8, background: low ? '#fff7ed' : '#f0fdf4', border: `1px solid ${low ? '#fdba74' : '#86efac'}` }}>
-                  <strong style={{ flex: '1 1 130px', color: low ? '#9a3412' : '#166534' }}>{low ? '⚠ ' : '✓ '}{ingredient.name}</strong>
+                <div key={`${ingredient.id}:${item.location}`} style={{ display: 'flex', alignItems: 'center', gap: '.45rem', flexWrap: 'wrap', padding: '.55rem .65rem', borderRadius: 8, background: out ? '#fff1f2' : low ? '#fff7ed' : '#f0fdf4', border: `1px solid ${out ? '#fca5a5' : low ? '#fdba74' : '#86efac'}` }}>
+                  <strong style={{ flex: '1 1 130px', color: out ? '#9f1239' : low ? '#9a3412' : '#166534' }}>{out || low ? '⚠ ' : '✓ '}{ingredient.name}</strong>
                   <input aria-label={`${ingredient.name} aantal`} type="number" min="0" step="any" value={item.quantity} onChange={(event) => update({ quantity: Math.max(0, Number(event.target.value) || 0) })} style={stockNumberInput} />
                   <select aria-label={`${ingredient.name} eenheid`} value={item.unit} onChange={(event) => update({ unit: event.target.value })} style={stockSelect}>
                     {STOCK_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
@@ -407,6 +408,7 @@ function StockPanel({ ingredients, stock, onAdd, onUpdate, onRemove }: {
                   <span style={stockLocationBadge}>{STOCK_LOCATIONS.find((location) => location.id === item.location)?.icon} {STOCK_LOCATIONS.find((location) => location.id === item.location)?.label}</span>
                   <input aria-label={`${ingredient.name} minimumvoorraad`} type="number" min="0" step="any" placeholder="Min." value={item.minimumQuantity ?? ''} onChange={(event) => update({ minimumQuantity: event.target.value === '' ? undefined : Math.max(0, Number(event.target.value) || 0) })} style={stockMinimumInput} />
                   <button aria-label={`${ingredient.name} uit voorraad halen`} onClick={() => onRemove(item)} style={stockRemoveButton}>×</button>
+                  {out && <span style={{ width: '100%', fontSize: '.75rem', color: '#9f1239' }}>Op — vul aan; minimum {item.minimumQuantity ?? 'niet ingesteld'} {item.minimumQuantity !== undefined ? item.unit : ''} blijft bewaard.</span>}
                   {low && <span style={{ width: '100%', fontSize: '.75rem', color: '#9a3412' }}>Bijna op — minimum {item.minimumQuantity} {item.unit}</span>}
                   <span style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '.35rem', flexWrap: 'wrap', fontSize: '.75rem', color: 'var(--text-muted)' }}>Ook toevoegen in:
                     {STOCK_LOCATIONS.filter((location) => location.id !== item.location && !stock.some((candidate) => candidate.ingredientId === ingredient.id && candidate.location === location.id)).map((location) => <button key={location.id} onClick={() => onAdd(ingredient.id, location.id)} style={stockAddLocationButton}>{location.icon} {location.label}</button>)}

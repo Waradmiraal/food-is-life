@@ -141,7 +141,9 @@ export function useAppState() {
   function updateStock(item: StockItem) {
     stockChange((current) => {
       const next = current.filter((existing) => !(existing.ingredientId === item.ingredientId && existing.location === item.location));
-      return item.quantity > 0 ? [...next, item] : next;
+      // Keep an empty row: its unit, location and minimum are useful when
+      // the product is bought again. The × button is the explicit removal.
+      return [...next, item];
     });
   }
   function removeStock(item: StockItem) {
