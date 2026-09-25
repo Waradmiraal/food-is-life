@@ -28,6 +28,27 @@ html, body { height: 100%; overflow: hidden; }
   --header-nav-inactive: #8aab95;
 }
 
+.stock-column-headings {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) 72px 78px 118px 65px 30px;
+  gap: .45rem;
+  align-items: center;
+  padding: 0 .65rem .25rem;
+  color: var(--text-muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.stock-column-headings span:last-child {
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .stock-column-headings { display: none; }
+}
+
 :root[data-theme="dark"] {
   --bg: #111827;
   --surface: #1f2937;

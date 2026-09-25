@@ -385,6 +385,14 @@ function StockPanel({ ingredients, stock, onAdd, onUpdate, onRemove }: {
         <div style={{ marginBottom: '1.25rem' }}>
           <h3 style={sh}>In huis ({inStock.length})</h3>
           <p className="text-muted" style={{ margin: '-.15rem 0 .6rem' }}>Pas aantal, eenheid, plek en eventueel je ondergrens aan.</p>
+          <div className="stock-column-headings" aria-hidden="true">
+            <span>Product</span>
+            <span>Aantal</span>
+            <span>Eenheid</span>
+            <span>Bewaarplek</span>
+            <span>Minimum</span>
+            <span title="Verwijderen">×</span>
+          </div>
           <div style={{ display: 'grid', gap: '.45rem' }}>
             {inStock.map(({ ingredient, item }) => {
               const low = item.minimumQuantity !== undefined && item.quantity <= item.minimumQuantity;
