@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { PlannedDay, Recipe, Ingredient, MealHistory, StockItem } from '../types';
-import { stockIds } from '../lib/stock';
+import { stockIds, STOCK_LOCATIONS } from '../lib/stock';
 
 function localToday(): string {
   const d = new Date();
@@ -30,6 +30,18 @@ export function ShoppingList({ week, recipes, allIngredients, stock, history, on
   const relevantDays = week.filter((d) => d.date >= today && !(d.recipeId && cookedSet.has(`${d.date}|${d.recipeId}`)));
 
   const stockSet = new Set(stockIds(stock));
+  const lowStock = stock
+    .filter((item) => item.minimumQuantity !== undefined && item.quantity < item.minimumQuantity)
+    .map((item) => {
+      const ingredient = allIngredients.find((candidate) => candidate.id === item.ingredientId);
+      return {
+        key: `${item.ingredientId}:${item.location}`,
+        name: ingredient?.name ?? item.ingredientId,
+        needed: (item.minimumQuantity ?? 0) - item.quantity,
+        unit: item.unit,
+        location: STOCK_LOCATIONS.find((candidate) => candidate.id === item.location)?.label ?? item.location,
+      };
+    });
   const needed = new Map<string, ShoppingItem>();
 
   for (const day of relevantDays) {
@@ -51,23 +63,45 @@ export function ShoppingList({ week, recipes, allIngredients, stock, history, on
   const toBuy = Array.from(needed.values()).filter((i) => !stockSet.has(i.ingredientId));
   const alreadyHave = Array.from(needed.values()).filter((i) => stockSet.has(i.ingredientId));
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [minimumChecked, setMinimumChecked] = useState<Set<string>>(new Set());
 
   function toggleChecked(id: string) {
     setChecked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleMinimumChecked(key: string) {
+    setMinimumChecked((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next; });
   }
 
   const plannedCount = relevantDays.filter((d) => d.recipeId).length;
   const boterhamDagen = relevantDays.filter((d) => d.lunch === 'boterham').length;
 
-  if (plannedCount === 0) {
-    return <p className="text-muted">Geen recepten gepland deze week.</p>;
+  if (plannedCount === 0 && lowStock.length === 0) {
+    return <p className="text-muted">Geen recepten gepland en geen producten onder minimumvoorraad.</p>;
   }
 
   return (
     <div>
       <p className="text-muted" style={{ marginBottom: '1rem', fontSize: '.85rem' }}>
-        Op basis van {plannedCount} geplande maaltijd{plannedCount !== 1 ? 'en' : ''} deze week.
+        {plannedCount > 0 ? `Op basis van ${plannedCount} geplande maaltijd${plannedCount !== 1 ? 'en' : ''} deze week.` : 'Geen recepten gepland deze week.'}
       </p>
+
+      {lowStock.length > 0 && (
+        <div style={{ marginBottom: '1.25rem' }}>
+          <h3 style={sh}>Aanvullen tot minimumvoorraad ({lowStock.length})</h3>
+          <p style={{ fontSize: '.78rem', color: 'var(--text-muted)', marginBottom: '.5rem' }}>Deze producten staan automatisch hier omdat ze onder jouw minimum zitten.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '.3rem' }}>
+            {lowStock.sort((a, b) => a.name.localeCompare(b.name)).map((item) => (
+              <label key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '.75rem', padding: '.45rem .5rem', borderRadius: 6, background: minimumChecked.has(item.key) ? '#f0fdf4' : '#fff7ed', cursor: 'pointer' }}>
+                <input type="checkbox" checked={minimumChecked.has(item.key)} onChange={() => toggleMinimumChecked(item.key)} />
+                <div style={{ flex: 1, textDecoration: minimumChecked.has(item.key) ? 'line-through' : 'none' }}>
+                  <span style={{ fontWeight: 600, fontSize: '.9rem' }}>{item.name}</span>
+                  <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: '.1rem' }}>Nog <b>{item.needed} {item.unit}</b> nodig · {item.location}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       {toBuy.length > 0 ? (
         <div style={{ marginBottom: '1.25rem' }}>
