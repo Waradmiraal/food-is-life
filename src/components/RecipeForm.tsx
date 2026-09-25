@@ -164,6 +164,7 @@ export function RecipeForm({ existing, allIngredients, onSave, onClose }: Props)
 
           {/* Ingrediënten met hoeveelheden */}
           <Field label="Ingrediënten (met hoeveelheden)">
+            <p style={{ fontSize: '.78rem', color: 'var(--text-muted)', margin: '0 0 .35rem' }}>Voor automatisch afboeken: gebruik bijvoorbeeld <strong>500 g</strong>, <strong>1 l</strong> of <strong>2 stuks</strong>.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
               {recipeIngredients.map((ri, i) => (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 120px auto', gap: '.3rem', alignItems: 'center' }}>
@@ -300,3 +301,4 @@ const addBtn: React.CSSProperties = {
   borderRadius: 5, background: 'var(--tag-bg)', fontSize: '.82rem',
   display: 'inline-flex', alignItems: 'center', gap: '.3rem',
 };
+

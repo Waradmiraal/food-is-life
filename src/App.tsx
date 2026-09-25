@@ -375,10 +375,12 @@ function StockPanel({ ingredients, stock, onToggle, onUpdate }: {
     return item ? [{ ingredient, item }] : [];
   }).sort((a, b) => Number(Boolean(b.item.minimumQuantity !== undefined && b.item.quantity <= b.item.minimumQuantity)) - Number(Boolean(a.item.minimumQuantity !== undefined && a.item.quantity <= a.item.minimumQuantity)) || a.ingredient.name.localeCompare(b.ingredient.name));
   const notInStock = filtered.filter((i) => !stockByIngredient.has(i.id));
+  const freezerCount = stock.filter((item) => item.location === 'vriezer' && item.quantity > 0).length;
 
   return (
     <div>
       <input type="search" placeholder="Zoeken…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: '100%', maxWidth: 360, padding: '.45rem .75rem', border: '1px solid var(--border)', borderRadius: 6, fontSize: '.9rem', marginBottom: '1rem' }} />
+      {freezerCount > 0 && <p style={{ display: 'inline-block', margin: '0 0 1rem .65rem', padding: '.35rem .6rem', borderRadius: 20, background: 'var(--tag-bg)', color: 'var(--text-muted)', fontSize: '.82rem' }}>🧊 {freezerCount} {freezerCount === 1 ? 'product' : 'producten'} in de vriezer</p>}
 
       {inStock.length > 0 && (
         <div style={{ marginBottom: '1.25rem' }}>
