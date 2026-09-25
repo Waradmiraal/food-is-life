@@ -85,7 +85,7 @@ const server = createServer(async (request, response) => {
 
     if (method === 'POST' && url.pathname === '/api/cook') {
       const body = await jsonBody(request) as {
-        date?: unknown; recipeId?: unknown; ingredientIds?: unknown; stockVersion?: unknown; historyVersion?: unknown;
+        date?: unknown; recipeId?: unknown; ingredientIds?: unknown; consumptions?: unknown; stockVersion?: unknown; historyVersion?: unknown;
       };
       const stockVersion = body.stockVersion;
       const historyVersion = body.historyVersion;
@@ -98,6 +98,14 @@ const server = createServer(async (request, response) => {
         date: body.date,
         recipeId: body.recipeId,
         ingredientIds: body.ingredientIds.filter((id): id is string => typeof id === 'string'),
+        consumptions: Array.isArray(body.consumptions) ? body.consumptions.flatMap((item) => {
+          if (!item || typeof item !== 'object') return [];
+          const candidate = item as { ingredientId?: unknown; quantity?: unknown; unit?: unknown };
+          return typeof candidate.ingredientId === 'string' && typeof candidate.unit === 'string'
+            && typeof candidate.quantity === 'number' && Number.isFinite(candidate.quantity) && candidate.quantity > 0
+            ? [{ ingredientId: candidate.ingredientId, unit: candidate.unit, quantity: candidate.quantity }]
+            : [];
+        }) : [],
         stockVersion,
         historyVersion,
       }));

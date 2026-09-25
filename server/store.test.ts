@@ -28,10 +28,10 @@ test('importeert legacygegevens maar één keer en maakt een compatibele back-up
     preferences: { excludedRecipes: ['test'] },
     'week-2026-09-21': [],
   });
-  assert.deepEqual(store.get<unknown[]>('stock').value, [{ ingredientId: 'ui', quantity: 1, unit: 'stuks' }]);
+  assert.deepEqual(store.get<unknown[]>('stock').value, [{ ingredientId: 'ui', quantity: 1, unit: 'stuks', location: 'voorraadkast' }]);
   assert.throws(() => store.importLegacy({ stock: [] }), /al uitgevoerd/);
   const backup = store.backup();
-  assert.deepEqual(backup.stock, [{ ingredientId: 'ui', quantity: 1, unit: 'stuks' }]);
+  assert.deepEqual(backup.stock, [{ ingredientId: 'ui', quantity: 1, unit: 'stuks', location: 'voorraadkast' }]);
   assert.deepEqual(backup['week-2026-09-21'], []);
   store.close();
 });
@@ -41,7 +41,7 @@ test('herstelt een back-up zonder de eenmalige-importstatus te wijzigen', () => 
   const stock = store.get<unknown[]>('stock');
   store.put('stock', ['oude'], stock.version);
   store.restore({ stock: ['nieuwe'] });
-  assert.deepEqual(store.get<unknown[]>('stock').value, [{ ingredientId: 'nieuwe', quantity: 1, unit: 'stuks' }]);
+  assert.deepEqual(store.get<unknown[]>('stock').value, [{ ingredientId: 'nieuwe', quantity: 1, unit: 'stuks', location: 'voorraadkast' }]);
   store.close();
 });
 
@@ -51,16 +51,17 @@ test('schrijft voorraad en geschiedenis atomair bij een kookactie', () => {
   const history = store.get<unknown[]>('history');
   store.put('stock', [
     { ingredientId: 'ui', quantity: 2, unit: 'stuks' },
-    { ingredientId: 'tomaat', quantity: 4, unit: 'stuks' },
+    { ingredientId: 'tomaat', quantity: 4, unit: 'stuks', location: 'vriezer' },
   ], stock.version);
   const result = store.cook({
     date: '2026-09-21',
     recipeId: 'test',
     ingredientIds: ['ui'],
+    consumptions: [{ ingredientId: 'tomaat', quantity: 2, unit: 'stuks' }],
     stockVersion: 2,
     historyVersion: history.version,
   });
-  assert.deepEqual(result.stock.value, [{ ingredientId: 'tomaat', quantity: 4, unit: 'stuks' }]);
+  assert.deepEqual(result.stock.value, [{ ingredientId: 'tomaat', quantity: 2, unit: 'stuks', location: 'vriezer' }]);
   assert.deepEqual(result.history.value, [{ date: '2026-09-21', recipeId: 'test' }]);
   store.close();
 });

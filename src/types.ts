@@ -20,10 +20,14 @@ export interface Ingredient {
 }
 
 /** A product that is physically present in the household stock. */
+export type StockLocation = 'voorraadkast' | 'koelkast' | 'vriezer';
+
 export interface StockItem {
   ingredientId: string;
   quantity: number;
   unit: string;
+  /** Where the product is stored at home. */
+  location: StockLocation;
   /** Optional threshold shown as "bijna op" in the voorraad screen. */
   minimumQuantity?: number;
 }

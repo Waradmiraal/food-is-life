@@ -32,7 +32,7 @@ function now(): string {
 function normalizeStock(value: unknown): StockItem[] {
   if (!Array.isArray(value)) return [];
   const items = value.flatMap((item): StockItem[] => {
-    if (typeof item === 'string') return [{ ingredientId: item, quantity: 1, unit: 'stuks' }];
+    if (typeof item === 'string') return [{ ingredientId: item, quantity: 1, unit: 'stuks', location: 'voorraadkast' }];
     if (!item || typeof item !== 'object') return [];
     const candidate = item as Partial<StockItem>;
     if (typeof candidate.ingredientId !== 'string' || !candidate.ingredientId) return [];
@@ -41,7 +41,10 @@ function normalizeStock(value: unknown): StockItem[] {
     const minimumQuantity = typeof candidate.minimumQuantity === 'number' && Number.isFinite(candidate.minimumQuantity)
       ? Math.max(0, candidate.minimumQuantity)
       : undefined;
-    return [{ ingredientId: candidate.ingredientId, quantity, unit, ...(minimumQuantity !== undefined ? { minimumQuantity } : {}) }];
+    const location = candidate.location === 'koelkast' || candidate.location === 'vriezer' || candidate.location === 'voorraadkast'
+      ? candidate.location
+      : 'voorraadkast';
+    return [{ ingredientId: candidate.ingredientId, quantity, unit, location, ...(minimumQuantity !== undefined ? { minimumQuantity } : {}) }];
   });
   return Array.from(new Map(items.map((item) => [item.ingredientId, item])).values());
 }
@@ -171,6 +174,7 @@ export class HouseholdStore {
     date: string;
     recipeId: string;
     ingredientIds: string[];
+    consumptions: { ingredientId: string; quantity: number; unit: string }[];
     stockVersion: number;
     historyVersion: number;
   }): { stock: VersionedDocument<StockItem[]>; history: VersionedDocument<MealHistory[]> } {
@@ -179,7 +183,15 @@ export class HouseholdStore {
     if (stock.version !== input.stockVersion) throw new VersionConflictError(stock);
     if (history.version !== input.historyVersion) throw new VersionConflictError(history);
 
-    const nextStock = stock.value.filter((item) => !input.ingredientIds.includes(item.ingredientId));
+    const consumed = new Map<string, number>();
+    for (const consumption of input.consumptions) {
+      const item = stock.value.find((candidate) => candidate.ingredientId === consumption.ingredientId);
+      if (item?.unit !== consumption.unit) continue;
+      consumed.set(consumption.ingredientId, (consumed.get(consumption.ingredientId) ?? 0) + consumption.quantity);
+    }
+    const nextStock = stock.value
+      .filter((item) => !input.ingredientIds.includes(item.ingredientId))
+      .map((item) => consumed.has(item.ingredientId) ? { ...item, quantity: Math.max(0, item.quantity - (consumed.get(item.ingredientId) ?? 0)) } : item);
     const nextHistory = [...history.value, { date: input.date, recipeId: input.recipeId }];
     return this.transaction(() => ({
       stock: this.put('stock', nextStock, stock.version),

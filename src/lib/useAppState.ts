@@ -135,7 +135,7 @@ export function useAppState() {
     stockChange((current) => {
       return current.some((item) => item.ingredientId === ingredientId)
         ? current.filter((item) => item.ingredientId !== ingredientId)
-        : [...current, { ingredientId, quantity: 1, unit: 'stuks' }];
+        : [...current, { ingredientId, quantity: 1, unit: 'stuks', location: 'voorraadkast' }];
     });
   }
   function updateStock(item: StockItem) {
@@ -147,7 +147,7 @@ export function useAppState() {
   function addToStock(ingredientIds: string[]) {
     stockChange((current) => {
       const currentIds = new Set(current.map((item) => item.ingredientId));
-      return [...current, ...ingredientIds.filter((id) => !currentIds.has(id)).map((ingredientId) => ({ ingredientId, quantity: 1, unit: 'stuks' }))];
+      return [...current, ...ingredientIds.filter((id) => !currentIds.has(id)).map((ingredientId) => ({ ingredientId, quantity: 1, unit: 'stuks', location: 'voorraadkast' as const }))];
     });
   }
   function uncookMeal(date: string, recipeId: string) {
@@ -157,14 +157,19 @@ export function useAppState() {
       return next;
     });
   }
-  function cookMeal(date: string, recipeId: string, ingredientIds: string[]) {
-    const nextStock = stock.filter((item) => !ingredientIds.includes(item.ingredientId));
+  function cookMeal(date: string, recipeId: string, ingredientIds: string[], consumptions: { ingredientId: string; quantity: number; unit: string }[]) {
+    const consumed = new Map<string, number>();
+    for (const consumption of consumptions) consumed.set(consumption.ingredientId, (consumed.get(consumption.ingredientId) ?? 0) + consumption.quantity);
+    const nextStock = stock.filter((item) => !ingredientIds.includes(item.ingredientId)).map((item) => {
+      const quantity = consumed.get(item.ingredientId);
+      return quantity !== undefined ? { ...item, quantity: Math.max(0, item.quantity - quantity) } : item;
+    });
     const nextHistory = [...history, { date, recipeId }];
     setStock(nextStock);
     setHistory(nextHistory);
     void (async () => {
       try {
-        const result = await cookOnServer({ date, recipeId, ingredientIds, stockVersion: versions.current.stock, historyVersion: versions.current.history });
+        const result = await cookOnServer({ date, recipeId, ingredientIds, consumptions, stockVersion: versions.current.stock, historyVersion: versions.current.history });
         versions.current.stock = result.stock.version;
         versions.current.history = result.history.version;
       } catch (cause) {

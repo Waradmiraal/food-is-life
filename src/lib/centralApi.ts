@@ -45,6 +45,7 @@ export function cookOnServer(input: {
   date: string;
   recipeId: string;
   ingredientIds: string[];
+  consumptions: { ingredientId: string; quantity: number; unit: string }[];
   stockVersion: number;
   historyVersion: number;
 }): Promise<{ stock: Versioned<StockItem[]>; history: Versioned<MealHistory[]> }> {

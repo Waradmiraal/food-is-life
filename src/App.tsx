@@ -18,7 +18,7 @@ import { IngredientEditor } from './components/IngredientEditor';
 import { ShoppingList } from './components/ShoppingList';
 import { currentSeasonLabel } from './lib/season';
 import { exportData, importData } from './lib/backup';
-import { STOCK_UNITS, formatStock } from './lib/stock';
+import { STOCK_LOCATIONS, STOCK_UNITS, formatStock } from './lib/stock';
 import type { StockItem } from './types';
 
 type View = 'planner' | 'library' | 'voorraad' | 'ingredients' | 'shopping' | 'settings';
@@ -383,7 +383,7 @@ function StockPanel({ ingredients, stock, onToggle, onUpdate }: {
       {inStock.length > 0 && (
         <div style={{ marginBottom: '1.25rem' }}>
           <h3 style={sh}>In huis ({inStock.length})</h3>
-          <p className="text-muted" style={{ margin: '-.15rem 0 .6rem' }}>Pas aantal, eenheid en eventueel je ondergrens aan.</p>
+          <p className="text-muted" style={{ margin: '-.15rem 0 .6rem' }}>Pas aantal, eenheid, plek en eventueel je ondergrens aan.</p>
           <div style={{ display: 'grid', gap: '.45rem' }}>
             {inStock.map(({ ingredient, item }) => {
               const low = item.minimumQuantity !== undefined && item.quantity <= item.minimumQuantity;
@@ -395,6 +395,9 @@ function StockPanel({ ingredients, stock, onToggle, onUpdate }: {
                   <select aria-label={`${ingredient.name} eenheid`} value={item.unit} onChange={(event) => update({ unit: event.target.value })} style={stockSelect}>
                     {STOCK_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
                   </select>
+                  <select aria-label={`${ingredient.name} bewaarplek`} value={item.location} onChange={(event) => update({ location: event.target.value as StockItem['location'] })} style={stockLocationSelect}>
+                    {STOCK_LOCATIONS.map((location) => <option key={location.id} value={location.id}>{location.icon} {location.label}</option>)}
+                  </select>
                   <input aria-label={`${ingredient.name} minimumvoorraad`} type="number" min="0" step="any" placeholder="Min." value={item.minimumQuantity ?? ''} onChange={(event) => update({ minimumQuantity: event.target.value === '' ? undefined : Math.max(0, Number(event.target.value) || 0) })} style={stockMinimumInput} />
                   <button aria-label={`${ingredient.name} uit voorraad halen`} onClick={() => onToggle(ingredient.id)} style={stockRemoveButton}>×</button>
                   {low && <span style={{ width: '100%', fontSize: '.75rem', color: '#9a3412' }}>Bijna op — minimum {item.minimumQuantity} {item.unit}</span>}
@@ -402,7 +405,7 @@ function StockPanel({ ingredients, stock, onToggle, onUpdate }: {
               );
             })}
           </div>
-          <p className="text-muted" style={{ marginTop: '.55rem' }}>{inStock.map(({ ingredient, item }) => `${ingredient.name}: ${formatStock(item)}`).join(' · ')}</p>
+          <p className="text-muted" style={{ marginTop: '.55rem' }}>{inStock.map(({ ingredient, item }) => `${ingredient.name}: ${formatStock(item)} (${STOCK_LOCATIONS.find((location) => location.id === item.location)?.label})`).join(' · ')}</p>
         </div>
       )}
 
@@ -424,6 +427,7 @@ function StockPanel({ ingredients, stock, onToggle, onUpdate }: {
 
 const stockNumberInput: React.CSSProperties = { width: 72, padding: '.32rem .4rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
 const stockSelect: React.CSSProperties = { minWidth: 78, padding: '.32rem .35rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
+const stockLocationSelect: React.CSSProperties = { minWidth: 118, padding: '.32rem .35rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
 const stockMinimumInput: React.CSSProperties = { width: 65, padding: '.32rem .4rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
 const stockRemoveButton: React.CSSProperties = { width: 30, height: 30, border: '1px solid #fca5a5', borderRadius: 6, background: '#fff1f2', color: '#b91c1c', cursor: 'pointer', fontSize: '1.15rem', lineHeight: 1 };
 
