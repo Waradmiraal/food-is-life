@@ -1,4 +1,4 @@
-import type { MealHistory } from '../types';
+import type { MealHistory, StockItem } from '../types';
 
 export interface Versioned<T> {
   value: T;
@@ -47,7 +47,7 @@ export function cookOnServer(input: {
   ingredientIds: string[];
   stockVersion: number;
   historyVersion: number;
-}): Promise<{ stock: Versioned<string[]>; history: Versioned<MealHistory[]> }> {
+}): Promise<{ stock: Versioned<StockItem[]>; history: Versioned<MealHistory[]> }> {
   return request('/api/cook', { method: 'POST', body: JSON.stringify(input) });
 }
 

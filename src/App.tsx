@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 // ── Themes ──────────────────────────────────────────────────────────────────
 const THEMES = [
+  { id: 'dark',        label: 'Donker',     header: '#111827', accent: '#60a5fa' },
   { id: 'forest',      label: 'Bos',        header: '#1a3d2b', accent: '#2d6a4f' },
   { id: 'terracotta',  label: 'Terracotta', header: '#4a2318', accent: '#b85c3a' },
   { id: 'slate-amber', label: 'Leisteen',   header: '#1e293b', accent: '#c47d0e' },
@@ -17,6 +18,8 @@ import { IngredientEditor } from './components/IngredientEditor';
 import { ShoppingList } from './components/ShoppingList';
 import { currentSeasonLabel } from './lib/season';
 import { exportData, importData } from './lib/backup';
+import { STOCK_UNITS, formatStock } from './lib/stock';
+import type { StockItem } from './types';
 
 type View = 'planner' | 'library' | 'voorraad' | 'ingredients' | 'shopping' | 'settings';
 
@@ -24,6 +27,7 @@ export default function App() {
   const [view, setView] = useState<View>('planner');
   const state = useAppState();
   const migrationPrompted = useRef(false);
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(() => localStorage.getItem('lastBackupAt'));
 
   // Theme
   const [theme, setTheme] = useState<ThemeId>(
@@ -65,6 +69,9 @@ export default function App() {
   async function handleExport() {
     try {
       await exportData();
+      const timestamp = new Date().toISOString();
+      localStorage.setItem('lastBackupAt', timestamp);
+      setLastBackupAt(timestamp);
     } catch (cause) {
       alert(cause instanceof Error ? cause.message : 'Export mislukt.');
     }
@@ -165,6 +172,7 @@ export default function App() {
               ingredients={state.ingredients}
               stock={state.stock}
               onToggle={state.toggleStock}
+              onUpdate={state.updateStock}
             />
           </>
         )}
@@ -205,6 +213,8 @@ export default function App() {
             onBack={() => setView(prevView.current)}
             onExport={handleExport}
             onImport={() => importRef.current?.click()}
+            lastBackupAt={lastBackupAt}
+            lastSyncedAt={state.lastSyncedAt}
           />
         )}
       </main>
@@ -234,12 +244,14 @@ export default function App() {
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────
-function SettingsPanel({ theme, onSetTheme, onBack, onExport, onImport }: {
+function SettingsPanel({ theme, onSetTheme, onBack, onExport, onImport, lastBackupAt, lastSyncedAt }: {
   theme: ThemeId;
   onSetTheme: (t: ThemeId) => void;
   onBack: () => void;
   onExport: () => void;
   onImport: () => void;
+  lastBackupAt: string | null;
+  lastSyncedAt: Date | null;
 }) {
   return (
     <div style={{ maxWidth: 420 }}>
@@ -303,6 +315,9 @@ function SettingsPanel({ theme, onSetTheme, onBack, onExport, onImport }: {
 
       <section style={{ marginBottom: '1.75rem' }}>
         <h2 style={sh}>Back-up &amp; herstel</h2>
+        <p className="text-muted" style={{ marginBottom: '.65rem' }}>
+          {lastBackupAt ? `Laatste JSON-back-up: ${new Date(lastBackupAt).toLocaleString('nl-NL')}` : 'Nog geen JSON-back-up gemaakt.'}
+        </p>
         <div style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap' }}>
           <button onClick={onExport} style={{ ...actionBtn, display: 'inline-flex', alignItems: 'center', gap: '.4rem' }}>
             <i className="fi fi-rr-download" /> Exporteer back-up
@@ -311,6 +326,13 @@ function SettingsPanel({ theme, onSetTheme, onBack, onExport, onImport }: {
             <i className="fi fi-rr-upload" /> Importeer back-up
           </button>
         </div>
+        <p className="text-muted" style={{ marginTop: '.65rem' }}>De centrale SQLite-opslag wordt bewaard op de server.</p>
+      </section>
+
+      <section style={{ marginBottom: '1.75rem' }}>
+        <h2 style={sh}>Gedeelde opslag</h2>
+        <p className="text-muted">{lastSyncedAt ? `Laatst bijgewerkt: ${lastSyncedAt.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}` : 'Verbinden met centrale opslag…'}</p>
+        <p className="text-muted" style={{ marginTop: '.35rem' }}>De app ververst bij openen en daarna elke 30 seconden.</p>
       </section>
 
       <section>
@@ -337,55 +359,61 @@ const actionBtn: React.CSSProperties = {
 };
 
 // Inline component — te klein voor eigen bestand
-function StockPanel({ ingredients, stock, onToggle }: {
+function StockPanel({ ingredients, stock, onToggle, onUpdate }: {
   ingredients: { id: string; name: string }[];
-  stock: string[];
+  stock: StockItem[];
   onToggle: (id: string) => void;
+  onUpdate: (item: StockItem) => void;
 }) {
   const [search, setSearch] = useState('');
-  const stockSet = new Set(stock);
+  const stockByIngredient = new Map(stock.map((item) => [item.ingredientId, item]));
   const filtered = ingredients
     .filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
-
-  const inStock = filtered.filter((i) => stockSet.has(i.id));
-  const notInStock = filtered.filter((i) => !stockSet.has(i.id));
+  const inStock = filtered.flatMap((ingredient) => {
+    const item = stockByIngredient.get(ingredient.id);
+    return item ? [{ ingredient, item }] : [];
+  }).sort((a, b) => Number(Boolean(b.item.minimumQuantity !== undefined && b.item.quantity <= b.item.minimumQuantity)) - Number(Boolean(a.item.minimumQuantity !== undefined && a.item.quantity <= a.item.minimumQuantity)) || a.ingredient.name.localeCompare(b.ingredient.name));
+  const notInStock = filtered.filter((i) => !stockByIngredient.has(i.id));
 
   return (
     <div>
-      <input
-        type="search"
-        placeholder="Zoeken…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={{ width: '100%', maxWidth: 360, padding: '.45rem .75rem', border: '1px solid var(--border)', borderRadius: 6, fontSize: '.9rem', marginBottom: '1rem' }}
-      />
+      <input type="search" placeholder="Zoeken…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: '100%', maxWidth: 360, padding: '.45rem .75rem', border: '1px solid var(--border)', borderRadius: 6, fontSize: '.9rem', marginBottom: '1rem' }} />
 
       {inStock.length > 0 && (
         <div style={{ marginBottom: '1.25rem' }}>
           <h3 style={sh}>In huis ({inStock.length})</h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem' }}>
-            {inStock.map((ing) => (
-              <button key={ing.id} onClick={() => onToggle(ing.id)} style={{
-                padding: '.3rem .7rem', borderRadius: 20, cursor: 'pointer', fontSize: '.85rem',
-                background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', fontWeight: 500,
-              }}>
-                ✓ {ing.name}
-              </button>
-            ))}
+          <p className="text-muted" style={{ margin: '-.15rem 0 .6rem' }}>Pas aantal, eenheid en eventueel je ondergrens aan.</p>
+          <div style={{ display: 'grid', gap: '.45rem' }}>
+            {inStock.map(({ ingredient, item }) => {
+              const low = item.minimumQuantity !== undefined && item.quantity <= item.minimumQuantity;
+              const update = (changes: Partial<StockItem>) => onUpdate({ ...item, ...changes });
+              return (
+                <div key={ingredient.id} style={{ display: 'flex', alignItems: 'center', gap: '.45rem', flexWrap: 'wrap', padding: '.55rem .65rem', borderRadius: 8, background: low ? '#fff7ed' : '#f0fdf4', border: `1px solid ${low ? '#fdba74' : '#86efac'}` }}>
+                  <strong style={{ flex: '1 1 130px', color: low ? '#9a3412' : '#166534' }}>{low ? '⚠ ' : '✓ '}{ingredient.name}</strong>
+                  <input aria-label={`${ingredient.name} aantal`} type="number" min="0" step="any" value={item.quantity} onChange={(event) => update({ quantity: Math.max(0, Number(event.target.value) || 0) })} style={stockNumberInput} />
+                  <select aria-label={`${ingredient.name} eenheid`} value={item.unit} onChange={(event) => update({ unit: event.target.value })} style={stockSelect}>
+                    {STOCK_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                  </select>
+                  <input aria-label={`${ingredient.name} minimumvoorraad`} type="number" min="0" step="any" placeholder="Min." value={item.minimumQuantity ?? ''} onChange={(event) => update({ minimumQuantity: event.target.value === '' ? undefined : Math.max(0, Number(event.target.value) || 0) })} style={stockMinimumInput} />
+                  <button aria-label={`${ingredient.name} uit voorraad halen`} onClick={() => onToggle(ingredient.id)} style={stockRemoveButton}>×</button>
+                  {low && <span style={{ width: '100%', fontSize: '.75rem', color: '#9a3412' }}>Bijna op — minimum {item.minimumQuantity} {item.unit}</span>}
+                </div>
+              );
+            })}
           </div>
+          <p className="text-muted" style={{ marginTop: '.55rem' }}>{inStock.map(({ ingredient, item }) => `${ingredient.name}: ${formatStock(item)}`).join(' · ')}</p>
         </div>
       )}
+
+      {inStock.length === 0 && <p className="text-muted" style={{ marginBottom: '1rem' }}>Nog niets in huis gezet. Kies hieronder een ingrediënt om met 1 stuk te beginnen.</p>}
 
       <div>
         <h3 style={sh}>Niet in huis ({notInStock.length})</h3>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem' }}>
           {notInStock.map((ing) => (
-            <button key={ing.id} onClick={() => onToggle(ing.id)} style={{
-              padding: '.3rem .7rem', borderRadius: 20, cursor: 'pointer', fontSize: '.85rem',
-              background: 'var(--tag-bg)', border: '1px solid var(--border)', color: 'var(--text-muted)',
-            }}>
-              {ing.name}
+            <button key={ing.id} onClick={() => onToggle(ing.id)} style={{ padding: '.35rem .7rem', borderRadius: 20, cursor: 'pointer', fontSize: '.85rem', background: 'var(--tag-bg)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+              + {ing.name}
             </button>
           ))}
         </div>
@@ -394,9 +422,13 @@ function StockPanel({ ingredients, stock, onToggle }: {
   );
 }
 
+const stockNumberInput: React.CSSProperties = { width: 72, padding: '.32rem .4rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
+const stockSelect: React.CSSProperties = { minWidth: 78, padding: '.32rem .35rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
+const stockMinimumInput: React.CSSProperties = { width: 65, padding: '.32rem .4rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
+const stockRemoveButton: React.CSSProperties = { width: 30, height: 30, border: '1px solid #fca5a5', borderRadius: 6, background: '#fff1f2', color: '#b91c1c', cursor: 'pointer', fontSize: '1.15rem', lineHeight: 1 };
+
 const sh: React.CSSProperties = {
   fontSize: '.75rem', fontWeight: 700, textTransform: 'uppercase',
   letterSpacing: '.05em', color: 'var(--text-muted)', marginBottom: '.5rem',
 };
-
 

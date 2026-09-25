@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import type { Recipe, Ingredient } from '../types';
+import type { Recipe, Ingredient, StockItem } from '../types';
+import { stockIds } from '../lib/stock';
 
 interface Props {
   recipe: Recipe;
   allIngredients: Ingredient[];
-  stock: string[];
+  stock: StockItem[];
   onDeplete: (ingredientIds: string[]) => void;
   onClose: () => void;
 }
 
 export function CookedModal({ recipe, allIngredients, stock, onDeplete, onClose }: Props) {
-  const stockSet = new Set(stock);
+  const stockSet = new Set(stockIds(stock));
 
   // Ingrediënten van dit recept die in de voorraad zitten
   const inStock = recipe.ingredients
@@ -93,3 +94,4 @@ export function CookedModal({ recipe, allIngredients, stock, onDeplete, onClose 
     </div>
   );
 }
+

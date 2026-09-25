@@ -19,6 +19,15 @@ export interface Ingredient {
   peakMonths?: number[];
 }
 
+/** A product that is physically present in the household stock. */
+export interface StockItem {
+  ingredientId: string;
+  quantity: number;
+  unit: string;
+  /** Optional threshold shown as "bijna op" in the voorraad screen. */
+  minimumQuantity?: number;
+}
+
 export interface RecipeIngredient {
   name: string;          // displaynaam incl. snijwijze: "ui, fijngesnipperd"
   amount?: string;       // "400g", "2 el", "1 teen", "naar smaak"
@@ -70,3 +79,4 @@ export interface AppState {
   week: PlannedDay[];
   history: MealHistory[];
 }
+

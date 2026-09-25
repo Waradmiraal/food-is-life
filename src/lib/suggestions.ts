@@ -1,4 +1,5 @@
-import type { Recipe, MealHistory, Ingredient, Preferences } from '../types';
+import type { Recipe, MealHistory, Ingredient, Preferences, StockItem } from '../types';
+import { stockIds } from './stock';
 import { seasonFit } from './season';
 import { daysSinceCooked, timesThisMonth } from './history';
 
@@ -17,10 +18,10 @@ export function rankRecipes(
   allIngredients: Ingredient[],
   month: number,
   preferences?: Preferences,
-  stock?: string[],
+  stock?: StockItem[],
 ): Recipe[] {
   const excluded = new Set(preferences?.excludedRecipes ?? []);
-  const inStock = new Set(stock ?? []);
+  const inStock = new Set(stockIds(stock ?? []));
   const scored = recipes.map((r) => {
     let score = 0;
     if (r.favorite) score += 2;
@@ -56,3 +57,4 @@ export function rankRecipes(
     .sort((a, b) => b.score - a.score)
     .map((s) => s.recipe);
 }
+
