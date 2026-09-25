@@ -44,8 +44,8 @@ export function putDocument<T>(key: string, value: T, version: number): Promise<
 export function cookOnServer(input: {
   date: string;
   recipeId: string;
-  ingredientIds: string[];
-  consumptions: { ingredientId: string; quantity: number; unit: string }[];
+  depleted: { ingredientId: string; location: StockItem['location'] }[];
+  consumptions: { ingredientId: string; location: StockItem['location']; quantity: number; unit: string }[];
   stockVersion: number;
   historyVersion: number;
 }): Promise<{ stock: Versioned<StockItem[]>; history: Versioned<MealHistory[]> }> {

@@ -30,8 +30,9 @@ export function normalizeStock(value: unknown): StockItem[] {
     return [{ ingredientId: candidate.ingredientId, quantity, unit, location, ...(minimumQuantity !== undefined ? { minimumQuantity } : {}) }];
   });
 
-  // The latest occurrence wins, avoiding duplicate product rows after imports.
-  return Array.from(new Map(items.map((item) => [item.ingredientId, item])).values());
+  // One row per product and storage location. This deliberately allows the
+  // same product in the fridge as well as in the freezer.
+  return Array.from(new Map(items.map((item) => [`${item.ingredientId}:${item.location}`, item])).values());
 }
 
 export function stockIds(stock: StockItem[]): string[] {

@@ -45,7 +45,7 @@ interface Props {
   stock: StockItem[];
   onAssign: (date: string, recipeId: string | null, note?: string) => void;
   onNavigate: (delta: number) => void;
-  onCookMeal: (date: string, recipeId: string, ingredientIds: string[], consumptions: { ingredientId: string; quantity: number; unit: string }[]) => void;
+  onCookMeal: (date: string, recipeId: string, depleted: { ingredientId: string; location: StockItem['location'] }[], consumptions: { ingredientId: string; location: StockItem['location']; quantity: number; unit: string }[]) => void;
   onUncookMeal: (date: string, recipeId: string) => void;
   onAddRecipe: (recipe: Recipe) => void;
   onSetLunch: (date: string, value: 'boterham' | 'skip' | null) => void;
@@ -365,7 +365,7 @@ export function WeekPlanner({ week, weekStart, recipes, ingredients, history, mo
           recipe={cookedRecipe.recipe}
           allIngredients={ingredients}
           stock={stock}
-          onCook={(ids, consumptions) => { onCookMeal(cookedRecipe.date, cookedRecipe.recipe.id, ids, consumptions); setCookedRecipe(null); }}
+          onCook={(depleted, consumptions) => { onCookMeal(cookedRecipe.date, cookedRecipe.recipe.id, depleted, consumptions); setCookedRecipe(null); }}
           onClose={() => setCookedRecipe(null)}
         />
       )}

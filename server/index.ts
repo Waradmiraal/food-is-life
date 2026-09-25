@@ -85,11 +85,11 @@ const server = createServer(async (request, response) => {
 
     if (method === 'POST' && url.pathname === '/api/cook') {
       const body = await jsonBody(request) as {
-        date?: unknown; recipeId?: unknown; ingredientIds?: unknown; consumptions?: unknown; stockVersion?: unknown; historyVersion?: unknown;
+        date?: unknown; recipeId?: unknown; depleted?: unknown; consumptions?: unknown; stockVersion?: unknown; historyVersion?: unknown;
       };
       const stockVersion = body.stockVersion;
       const historyVersion = body.historyVersion;
-      if (typeof body.date !== 'string' || typeof body.recipeId !== 'string' || !Array.isArray(body.ingredientIds)
+      if (typeof body.date !== 'string' || typeof body.recipeId !== 'string' || !Array.isArray(body.depleted)
         || typeof stockVersion !== 'number' || !Number.isInteger(stockVersion)
         || typeof historyVersion !== 'number' || !Number.isInteger(historyVersion)) {
         return send(response, 400, { error: 'Ongeldige kookactie.' });
@@ -97,13 +97,19 @@ const server = createServer(async (request, response) => {
       return send(response, 200, store.cook({
         date: body.date,
         recipeId: body.recipeId,
-        ingredientIds: body.ingredientIds.filter((id): id is string => typeof id === 'string'),
+        depleted: body.depleted.flatMap((item) => {
+          if (!item || typeof item !== 'object') return [];
+          const candidate = item as { ingredientId?: unknown; location?: unknown };
+          return typeof candidate.ingredientId === 'string' && (candidate.location === 'voorraadkast' || candidate.location === 'koelkast' || candidate.location === 'vriezer')
+            ? [{ ingredientId: candidate.ingredientId, location: candidate.location }]
+            : [];
+        }),
         consumptions: Array.isArray(body.consumptions) ? body.consumptions.flatMap((item) => {
           if (!item || typeof item !== 'object') return [];
-          const candidate = item as { ingredientId?: unknown; quantity?: unknown; unit?: unknown };
-          return typeof candidate.ingredientId === 'string' && typeof candidate.unit === 'string'
+          const candidate = item as { ingredientId?: unknown; location?: unknown; quantity?: unknown; unit?: unknown };
+          return typeof candidate.ingredientId === 'string' && (candidate.location === 'voorraadkast' || candidate.location === 'koelkast' || candidate.location === 'vriezer') && typeof candidate.unit === 'string'
             && typeof candidate.quantity === 'number' && Number.isFinite(candidate.quantity) && candidate.quantity > 0
-            ? [{ ingredientId: candidate.ingredientId, unit: candidate.unit, quantity: candidate.quantity }]
+            ? [{ ingredientId: candidate.ingredientId, location: candidate.location, unit: candidate.unit, quantity: candidate.quantity }]
             : [];
         }) : [],
         stockVersion,

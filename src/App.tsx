@@ -171,8 +171,9 @@ export default function App() {
             <StockPanel
               ingredients={state.ingredients}
               stock={state.stock}
-              onToggle={state.toggleStock}
+              onAdd={state.addStock}
               onUpdate={state.updateStock}
+              onRemove={state.removeStock}
             />
           </>
         )}
@@ -359,22 +360,20 @@ const actionBtn: React.CSSProperties = {
 };
 
 // Inline component — te klein voor eigen bestand
-function StockPanel({ ingredients, stock, onToggle, onUpdate }: {
+function StockPanel({ ingredients, stock, onAdd, onUpdate, onRemove }: {
   ingredients: { id: string; name: string }[];
   stock: StockItem[];
-  onToggle: (id: string) => void;
+  onAdd: (id: string, location?: StockItem['location']) => void;
   onUpdate: (item: StockItem) => void;
+  onRemove: (item: StockItem) => void;
 }) {
   const [search, setSearch] = useState('');
-  const stockByIngredient = new Map(stock.map((item) => [item.ingredientId, item]));
   const filtered = ingredients
     .filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const inStock = filtered.flatMap((ingredient) => {
-    const item = stockByIngredient.get(ingredient.id);
-    return item ? [{ ingredient, item }] : [];
-  }).sort((a, b) => Number(Boolean(b.item.minimumQuantity !== undefined && b.item.quantity <= b.item.minimumQuantity)) - Number(Boolean(a.item.minimumQuantity !== undefined && a.item.quantity <= a.item.minimumQuantity)) || a.ingredient.name.localeCompare(b.ingredient.name));
-  const notInStock = filtered.filter((i) => !stockByIngredient.has(i.id));
+  const inStock = filtered.flatMap((ingredient) => stock.filter((item) => item.ingredientId === ingredient.id).map((item) => ({ ingredient, item })))
+    .sort((a, b) => Number(Boolean(b.item.minimumQuantity !== undefined && b.item.quantity <= b.item.minimumQuantity)) - Number(Boolean(a.item.minimumQuantity !== undefined && a.item.quantity <= a.item.minimumQuantity)) || a.ingredient.name.localeCompare(b.ingredient.name));
+  const notInStock = filtered.filter((ingredient) => !stock.some((item) => item.ingredientId === ingredient.id));
   const freezerCount = stock.filter((item) => item.location === 'vriezer' && item.quantity > 0).length;
 
   return (
@@ -397,12 +396,13 @@ function StockPanel({ ingredients, stock, onToggle, onUpdate }: {
                   <select aria-label={`${ingredient.name} eenheid`} value={item.unit} onChange={(event) => update({ unit: event.target.value })} style={stockSelect}>
                     {STOCK_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
                   </select>
-                  <select aria-label={`${ingredient.name} bewaarplek`} value={item.location} onChange={(event) => update({ location: event.target.value as StockItem['location'] })} style={stockLocationSelect}>
-                    {STOCK_LOCATIONS.map((location) => <option key={location.id} value={location.id}>{location.icon} {location.label}</option>)}
-                  </select>
+                  <span style={stockLocationBadge}>{STOCK_LOCATIONS.find((location) => location.id === item.location)?.icon} {STOCK_LOCATIONS.find((location) => location.id === item.location)?.label}</span>
                   <input aria-label={`${ingredient.name} minimumvoorraad`} type="number" min="0" step="any" placeholder="Min." value={item.minimumQuantity ?? ''} onChange={(event) => update({ minimumQuantity: event.target.value === '' ? undefined : Math.max(0, Number(event.target.value) || 0) })} style={stockMinimumInput} />
-                  <button aria-label={`${ingredient.name} uit voorraad halen`} onClick={() => onToggle(ingredient.id)} style={stockRemoveButton}>×</button>
+                  <button aria-label={`${ingredient.name} uit voorraad halen`} onClick={() => onRemove(item)} style={stockRemoveButton}>×</button>
                   {low && <span style={{ width: '100%', fontSize: '.75rem', color: '#9a3412' }}>Bijna op — minimum {item.minimumQuantity} {item.unit}</span>}
+                  <span style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '.35rem', flexWrap: 'wrap', fontSize: '.75rem', color: 'var(--text-muted)' }}>Ook toevoegen in:
+                    {STOCK_LOCATIONS.filter((location) => location.id !== item.location && !stock.some((candidate) => candidate.ingredientId === ingredient.id && candidate.location === location.id)).map((location) => <button key={location.id} onClick={() => onAdd(ingredient.id, location.id)} style={stockAddLocationButton}>{location.icon} {location.label}</button>)}
+                  </span>
                 </div>
               );
             })}
@@ -417,7 +417,7 @@ function StockPanel({ ingredients, stock, onToggle, onUpdate }: {
         <h3 style={sh}>Niet in huis ({notInStock.length})</h3>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem' }}>
           {notInStock.map((ing) => (
-            <button key={ing.id} onClick={() => onToggle(ing.id)} style={{ padding: '.35rem .7rem', borderRadius: 20, cursor: 'pointer', fontSize: '.85rem', background: 'var(--tag-bg)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+            <button key={ing.id} onClick={() => onAdd(ing.id)} style={{ padding: '.35rem .7rem', borderRadius: 20, cursor: 'pointer', fontSize: '.85rem', background: 'var(--tag-bg)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
               + {ing.name}
             </button>
           ))}
@@ -429,9 +429,10 @@ function StockPanel({ ingredients, stock, onToggle, onUpdate }: {
 
 const stockNumberInput: React.CSSProperties = { width: 72, padding: '.32rem .4rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
 const stockSelect: React.CSSProperties = { minWidth: 78, padding: '.32rem .35rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
-const stockLocationSelect: React.CSSProperties = { minWidth: 118, padding: '.32rem .35rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
+const stockLocationBadge: React.CSSProperties = { padding: '.32rem .4rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--tag-bg)', color: 'var(--text-muted)', fontSize: '.76rem' };
 const stockMinimumInput: React.CSSProperties = { width: 65, padding: '.32rem .4rem', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' };
 const stockRemoveButton: React.CSSProperties = { width: 30, height: 30, border: '1px solid #fca5a5', borderRadius: 6, background: '#fff1f2', color: '#b91c1c', cursor: 'pointer', fontSize: '1.15rem', lineHeight: 1 };
+const stockAddLocationButton: React.CSSProperties = { padding: '.18rem .4rem', border: '1px solid var(--border)', borderRadius: 12, background: 'var(--surface)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '.72rem' };
 
 const sh: React.CSSProperties = {
   fontSize: '.75rem', fontWeight: 700, textTransform: 'uppercase',

@@ -56,8 +56,8 @@ test('schrijft voorraad en geschiedenis atomair bij een kookactie', () => {
   const result = store.cook({
     date: '2026-09-21',
     recipeId: 'test',
-    ingredientIds: ['ui'],
-    consumptions: [{ ingredientId: 'tomaat', quantity: 2, unit: 'stuks' }],
+    depleted: [{ ingredientId: 'ui', location: 'voorraadkast' }],
+    consumptions: [{ ingredientId: 'tomaat', location: 'vriezer', quantity: 2, unit: 'stuks' }],
     stockVersion: 2,
     historyVersion: history.version,
   });

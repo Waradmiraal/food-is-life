@@ -46,7 +46,7 @@ function normalizeStock(value: unknown): StockItem[] {
       : 'voorraadkast';
     return [{ ingredientId: candidate.ingredientId, quantity, unit, location, ...(minimumQuantity !== undefined ? { minimumQuantity } : {}) }];
   });
-  return Array.from(new Map(items.map((item) => [item.ingredientId, item])).values());
+  return Array.from(new Map(items.map((item) => [`${item.ingredientId}:${item.location}`, item])).values());
 }
 
 function defaultWeek(monday: string): PlannedDay[] {
@@ -173,8 +173,8 @@ export class HouseholdStore {
   cook(input: {
     date: string;
     recipeId: string;
-    ingredientIds: string[];
-    consumptions: { ingredientId: string; quantity: number; unit: string }[];
+    depleted: { ingredientId: string; location: StockItem['location'] }[];
+    consumptions: { ingredientId: string; location: StockItem['location']; quantity: number; unit: string }[];
     stockVersion: number;
     historyVersion: number;
   }): { stock: VersionedDocument<StockItem[]>; history: VersionedDocument<MealHistory[]> } {
@@ -185,13 +185,18 @@ export class HouseholdStore {
 
     const consumed = new Map<string, number>();
     for (const consumption of input.consumptions) {
-      const item = stock.value.find((candidate) => candidate.ingredientId === consumption.ingredientId);
+      const item = stock.value.find((candidate) => candidate.ingredientId === consumption.ingredientId && candidate.location === consumption.location);
       if (item?.unit !== consumption.unit) continue;
-      consumed.set(consumption.ingredientId, (consumed.get(consumption.ingredientId) ?? 0) + consumption.quantity);
+      const key = `${consumption.ingredientId}:${consumption.location}`;
+      consumed.set(key, (consumed.get(key) ?? 0) + consumption.quantity);
     }
+    const depletedKeys = new Set(input.depleted.map((item) => `${item.ingredientId}:${item.location}`));
     const nextStock = stock.value
-      .filter((item) => !input.ingredientIds.includes(item.ingredientId))
-      .map((item) => consumed.has(item.ingredientId) ? { ...item, quantity: Math.max(0, item.quantity - (consumed.get(item.ingredientId) ?? 0)) } : item);
+      .filter((item) => !depletedKeys.has(`${item.ingredientId}:${item.location}`))
+      .map((item) => {
+        const key = `${item.ingredientId}:${item.location}`;
+        return consumed.has(key) ? { ...item, quantity: Math.max(0, item.quantity - (consumed.get(key) ?? 0)) } : item;
+      });
     const nextHistory = [...history.value, { date: input.date, recipeId: input.recipeId }];
     return this.transaction(() => ({
       stock: this.put('stock', nextStock, stock.version),
