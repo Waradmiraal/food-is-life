@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Ingredient, MealHistory, PlannedDay, Preferences, Recipe } from '../types';
+import type { Ingredient, MealHistory, PlannedDay, Preferences, Recipe, StockItem } from '../types';
 import { INGREDIENTS } from '../data/ingredients';
 import { RECIPES } from '../data/recipes';
 import { cookOnServer, getState, hasLegacyData, importLegacyData, putDocument, type Versioned } from './centralApi';
+import { normalizeStock } from './stock';
 
 function localDateStr(date: Date): string {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
@@ -28,10 +29,11 @@ export function useAppState() {
   const [week, setWeek] = useState<PlannedDay[]>(() => buildWeek(getMonday(new Date())));
   const [history, setHistory] = useState<MealHistory[]>([]);
   const [preferences, setPreferences] = useState<Preferences>({ excludedRecipes: [] });
-  const [stock, setStock] = useState<string[]>([]);
+  const [stock, setStock] = useState<StockItem[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [serverImported, setServerImported] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const versions = useRef<Record<string, number>>({});
 
   const loadState = useCallback(async (monday: Date) => {
@@ -41,13 +43,15 @@ export function useAppState() {
       const document = <T,>(key: string) => response.documents[key] as Versioned<T>;
       setRecipes(document<Recipe[]>('recipes').value);
       setIngredients(document<Ingredient[]>('ingredients').value);
-      setStock(document<string[]>('stock').value);
+      const savedStock = normalizeStock(document<unknown>('stock').value);
+      setStock(savedStock);
       setHistory(document<MealHistory[]>('history').value);
       setPreferences(document<Preferences>('preferences').value);
       setWeek(document<PlannedDay[]>(`week/${mondayKey}`).value);
       for (const [key, value] of Object.entries(response.documents)) versions.current[key] = value.version;
       setServerImported(response.localStorageImported);
       setError(null);
+      setLastSyncedAt(new Date());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Geen verbinding met de centrale opslag.');
     } finally {
@@ -56,6 +60,19 @@ export function useAppState() {
   }, []);
 
   useEffect(() => { void loadState(weekStart); }, [loadState, weekStart]);
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void loadState(weekStart);
+    };
+    const interval = window.setInterval(refreshWhenVisible, 30_000);
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [loadState, weekStart]);
 
   async function persist<T>(key: string, value: T) {
     const version = versions.current[key];
@@ -95,7 +112,7 @@ export function useAppState() {
   function ingredientsChange(change: (current: Ingredient[]) => Ingredient[]) {
     setIngredients((current) => { const next = change(current); void persist('ingredients', next); return next; });
   }
-  function stockChange(change: (current: string[]) => string[]) {
+  function stockChange(change: (current: StockItem[]) => StockItem[]) {
     setStock((current) => { const next = change(current); void persist('stock', next); return next; });
   }
 
@@ -116,12 +133,23 @@ export function useAppState() {
   }
   function toggleStock(ingredientId: string) {
     stockChange((current) => {
-      const ids = new Set(current);
-      ids.has(ingredientId) ? ids.delete(ingredientId) : ids.add(ingredientId);
-      return [...ids];
+      return current.some((item) => item.ingredientId === ingredientId)
+        ? current.filter((item) => item.ingredientId !== ingredientId)
+        : [...current, { ingredientId, quantity: 1, unit: 'stuks' }];
     });
   }
-  function addToStock(ingredientIds: string[]) { stockChange((current) => [...new Set([...current, ...ingredientIds])]); }
+  function updateStock(item: StockItem) {
+    stockChange((current) => {
+      const next = current.filter((existing) => existing.ingredientId !== item.ingredientId);
+      return item.quantity > 0 ? [...next, item] : next;
+    });
+  }
+  function addToStock(ingredientIds: string[]) {
+    stockChange((current) => {
+      const currentIds = new Set(current.map((item) => item.ingredientId));
+      return [...current, ...ingredientIds.filter((id) => !currentIds.has(id)).map((ingredientId) => ({ ingredientId, quantity: 1, unit: 'stuks' }))];
+    });
+  }
   function uncookMeal(date: string, recipeId: string) {
     setHistory((current) => {
       const next = current.filter((entry) => !(entry.date === date && entry.recipeId === recipeId));
@@ -130,7 +158,7 @@ export function useAppState() {
     });
   }
   function cookMeal(date: string, recipeId: string, ingredientIds: string[]) {
-    const nextStock = stock.filter((id) => !ingredientIds.includes(id));
+    const nextStock = stock.filter((item) => !ingredientIds.includes(item.ingredientId));
     const nextHistory = [...history, { date, recipeId }];
     setStock(nextStock);
     setHistory(nextHistory);
@@ -149,11 +177,10 @@ export function useAppState() {
   function goToCurrentWeek() { setWeekStart(getMonday(new Date())); }
 
   return {
-    recipes, ingredients, week, weekStart, history, preferences, stock, ready, error, serverImported,
+    recipes, ingredients, week, weekStart, history, preferences, stock, ready, error, serverImported, lastSyncedAt,
     hasLegacyData: hasLegacyData(), navigateWeek, assignMeal, toggleFavorite, addRecipe, updateRecipe, deleteRecipe,
-    updateIngredient, addIngredient, goToCurrentWeek, toggleExcluded, toggleStock, addToStock, cookMeal, uncookMeal,
+    updateIngredient, addIngredient, goToCurrentWeek, toggleExcluded, toggleStock, updateStock, addToStock, cookMeal, uncookMeal,
     setLunch, importOldBrowserData, refresh: () => loadState(weekStart),
   };
 }
-
 

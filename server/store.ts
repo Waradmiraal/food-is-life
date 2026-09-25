@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { INGREDIENTS } from '../src/data/ingredients.js';
 import { RECIPES } from '../src/data/recipes.js';
-import type { Ingredient, MealHistory, PlannedDay, Preferences, Recipe } from '../src/types.js';
+import type { Ingredient, MealHistory, PlannedDay, Preferences, Recipe, StockItem } from '../src/types.js';
 
 export type StateKey = 'recipes' | 'ingredients' | 'stock' | 'preferences' | 'history' | `week/${string}`;
 
@@ -27,6 +27,23 @@ const baseKeys = ['recipes', 'ingredients', 'stock', 'preferences', 'history'] a
 
 function now(): string {
   return new Date().toISOString();
+}
+
+function normalizeStock(value: unknown): StockItem[] {
+  if (!Array.isArray(value)) return [];
+  const items = value.flatMap((item): StockItem[] => {
+    if (typeof item === 'string') return [{ ingredientId: item, quantity: 1, unit: 'stuks' }];
+    if (!item || typeof item !== 'object') return [];
+    const candidate = item as Partial<StockItem>;
+    if (typeof candidate.ingredientId !== 'string' || !candidate.ingredientId) return [];
+    const quantity = typeof candidate.quantity === 'number' && Number.isFinite(candidate.quantity) ? Math.max(0, candidate.quantity) : 1;
+    const unit = typeof candidate.unit === 'string' && candidate.unit.trim() ? candidate.unit.trim() : 'stuks';
+    const minimumQuantity = typeof candidate.minimumQuantity === 'number' && Number.isFinite(candidate.minimumQuantity)
+      ? Math.max(0, candidate.minimumQuantity)
+      : undefined;
+    return [{ ingredientId: candidate.ingredientId, quantity, unit, ...(minimumQuantity !== undefined ? { minimumQuantity } : {}) }];
+  });
+  return Array.from(new Map(items.map((item) => [item.ingredientId, item])).values());
 }
 
 function defaultWeek(monday: string): PlannedDay[] {
@@ -88,8 +105,19 @@ export class HouseholdStore {
     this.ensure('recipes', RECIPES);
     this.ensure('ingredients', INGREDIENTS);
     this.ensure('stock', []);
+    this.migrateLegacyStock();
     this.ensure('preferences', { excludedRecipes: [] });
     this.ensure('history', []);
+  }
+
+  /** Converts the old string[] stock format without losing existing products. */
+  private migrateLegacyStock(): void {
+    const current = this.db.prepare('SELECT data FROM documents WHERE key = ?').get('stock') as { data: string };
+    const normalized = normalizeStock(JSON.parse(current.data));
+    if (JSON.stringify(normalized) === current.data) return;
+    this.db.prepare('UPDATE documents SET data = ?, version = version + 1, updated_at = ? WHERE key = ?').run(
+      JSON.stringify(normalized), now(), 'stock',
+    );
   }
 
   private initialValue(key: StateKey): unknown {
@@ -129,13 +157,14 @@ export class HouseholdStore {
     const current = this.get<T>(key);
     if (current.version !== expectedVersion) throw new VersionConflictError(current);
 
+    const normalizedValue = (key === 'stock' ? normalizeStock(value) : value) as T;
     const updatedAt = now();
     const result = this.db.prepare(
       'UPDATE documents SET data = ?, version = version + 1, updated_at = ? WHERE key = ? AND version = ?',
-    ).run(JSON.stringify(value), updatedAt, key, expectedVersion);
+    ).run(JSON.stringify(normalizedValue), updatedAt, key, expectedVersion);
     if (result.changes !== 1) throw new VersionConflictError(this.get(key));
 
-    return { value, version: expectedVersion + 1, updatedAt };
+    return { value: normalizedValue, version: expectedVersion + 1, updatedAt };
   }
 
   cook(input: {
@@ -144,13 +173,13 @@ export class HouseholdStore {
     ingredientIds: string[];
     stockVersion: number;
     historyVersion: number;
-  }): { stock: VersionedDocument<string[]>; history: VersionedDocument<MealHistory[]> } {
-    const stock = this.get<string[]>('stock');
+  }): { stock: VersionedDocument<StockItem[]>; history: VersionedDocument<MealHistory[]> } {
+    const stock = this.get<StockItem[]>('stock');
     const history = this.get<MealHistory[]>('history');
     if (stock.version !== input.stockVersion) throw new VersionConflictError(stock);
     if (history.version !== input.historyVersion) throw new VersionConflictError(history);
 
-    const nextStock = stock.value.filter((id) => !input.ingredientIds.includes(id));
+    const nextStock = stock.value.filter((item) => !input.ingredientIds.includes(item.ingredientId));
     const nextHistory = [...history.value, { date: input.date, recipeId: input.recipeId }];
     return this.transaction(() => ({
       stock: this.put('stock', nextStock, stock.version),
@@ -184,7 +213,7 @@ export class HouseholdStore {
 
   private replaceFromBackup(data: Record<string, unknown>, withinTransaction = false): void {
     const entries: Array<[StateKey, unknown]> = [];
-    for (const key of baseKeys) if (key in data) entries.push([key, data[key]]);
+    for (const key of baseKeys) if (key in data) entries.push([key, key === 'stock' ? normalizeStock(data[key]) : data[key]]);
     for (const [key, value] of Object.entries(data)) {
       if (key.startsWith('week-') && /^week-\d{4}-\d{2}-\d{2}$/.test(key)) {
         entries.push([`week/${key.slice('week-'.length)}`, value]);

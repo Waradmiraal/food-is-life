@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Recipe, Ingredient, MealHistory, Preferences } from '../types';
+import type { Recipe, Ingredient, MealHistory, Preferences, StockItem } from '../types';
 import { seasonFit } from '../lib/season';
 import { rankRecipes } from '../lib/suggestions';
 import { daysSinceCooked } from '../lib/history';
@@ -22,7 +22,7 @@ interface Props {
   currentRecipeId: string | null;
   currentNote?: string;
   preferences: Preferences;
-  stock: string[];
+  stock: StockItem[];
   onPick: (recipeId: string | null, note?: string) => void;
   onAddRecipe: (recipe: Recipe) => void;
   onClose: () => void;
@@ -176,3 +176,4 @@ export function MealPicker({ date, isWeekend, recipes, ingredients, history, mon
     </>
   );
 }
+

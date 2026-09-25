@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { PlannedDay, Recipe, Ingredient, MealHistory } from '../types';
+import type { PlannedDay, Recipe, Ingredient, MealHistory, StockItem } from '../types';
+import { stockIds } from '../lib/stock';
 
 function localToday(): string {
   const d = new Date();
@@ -16,7 +17,7 @@ interface Props {
   week: PlannedDay[];
   recipes: Recipe[];
   allIngredients: Ingredient[];
-  stock: string[];
+  stock: StockItem[];
   history: MealHistory[];
   onAddToStock: (ids: string[]) => void;
 }
@@ -28,7 +29,7 @@ export function ShoppingList({ week, recipes, allIngredients, stock, history, on
   // Only include days from today onward, and only if the meal hasn't been cooked yet
   const relevantDays = week.filter((d) => d.date >= today && !(d.recipeId && cookedSet.has(`${d.date}|${d.recipeId}`)));
 
-  const stockSet = new Set(stock);
+  const stockSet = new Set(stockIds(stock));
   const needed = new Map<string, ShoppingItem>();
 
   for (const day of relevantDays) {
@@ -145,3 +146,4 @@ function UnlinkedNote({ week, recipes }: { week: PlannedDay[]; recipes: Recipe[]
 }
 
 const sh: React.CSSProperties = { fontSize: '.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text-muted)', marginBottom: '.5rem' };
+

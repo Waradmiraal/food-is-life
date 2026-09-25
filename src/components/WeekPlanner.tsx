@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import type { PlannedDay, Recipe, Ingredient, MealHistory, Preferences } from '../types';
+import type { PlannedDay, Recipe, Ingredient, MealHistory, Preferences, StockItem } from '../types';
 import { MealPicker } from './MealPicker';
 import { RecipeDetail } from './RecipeDetail';
 import { CookedModal } from './CookedModal';
@@ -42,7 +42,7 @@ interface Props {
   history: MealHistory[];
   month: number;
   preferences: Preferences;
-  stock: string[];
+  stock: StockItem[];
   onAssign: (date: string, recipeId: string | null, note?: string) => void;
   onNavigate: (delta: number) => void;
   onCookMeal: (date: string, recipeId: string, ingredientIds: string[]) => void;
@@ -372,3 +372,4 @@ export function WeekPlanner({ week, weekStart, recipes, ingredients, history, mo
     </div>
   );
 }
+
